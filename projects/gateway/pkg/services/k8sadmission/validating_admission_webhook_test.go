@@ -17,8 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/solo-io/gloo/projects/gateway/pkg/api/v1"
 	"github.com/solo-io/gloo/projects/gateway/pkg/defaults"
@@ -516,14 +515,6 @@ func (v *mockValidator) Sync(ctx context.Context, snap *gloov1snap.ApiSnapshot) 
 		return nil
 	}
 	return v.fSync(ctx, snap)
-}
-
-func (v *mockValidator) ModificationIsSupported(gvk schema.GroupVersionKind) bool {
-	return true
-}
-
-func (v *mockValidator) DeletionIsSupported(gvk schema.GroupVersionKind) bool {
-	return true
 }
 
 func (v *mockValidator) ValidateDeletedGvk(ctx context.Context, gvk schema.GroupVersionKind, resource resources.Resource, dryRun bool) error {

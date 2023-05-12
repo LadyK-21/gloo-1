@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ratelimit "github.com/solo-io/gloo/projects/gloo/pkg/api/external/solo/ratelimit"
 	validationgrpc "github.com/solo-io/gloo/projects/gloo/pkg/api/grpc/validation"
@@ -45,6 +45,7 @@ var _ = Describe("Validation Server", func() {
 		params            plugins.Params
 		registeredPlugins []plugins.Plugin
 		xdsSanitizer      sanitizer.XdsSanitizers
+		vc                ValidatorConfig
 	)
 
 	BeforeEach(func() {
@@ -81,6 +82,13 @@ var _ = Describe("Validation Server", func() {
 		pluginRegistry := registry.NewPluginRegistry(registeredPlugins)
 
 		translator = NewTranslatorWithHasher(utils.NewSslConfigTranslator(), settings, pluginRegistry, EnvoyCacheResourcesListToFnvHash)
+		vc = ValidatorConfig{
+			Ctx: context.TODO(),
+			GlooValidatorConfig: GlooValidatorConfig{
+				XdsSanitizer: xdsSanitizer,
+				Translator:   translator,
+			},
+		}
 	})
 
 	Context("proxy validation", func() {
@@ -89,7 +97,7 @@ var _ = Describe("Validation Server", func() {
 		Context("validates the requested proxy", func() {
 			It("works with Validate", func() {
 				proxy := params.Snapshot.Proxies[0]
-				s := NewValidator(context.TODO(), translator, xdsSanitizer)
+				s := NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 				rpt, err := s.Validate(context.TODO(), &validationgrpc.GlooValidationServiceRequest{Proxy: proxy})
 				Expect(err).NotTo(HaveOccurred())
@@ -105,7 +113,7 @@ var _ = Describe("Validation Server", func() {
 			})
 			It("works with Validate Gloo", func() {
 				proxy := params.Snapshot.Proxies[0]
-				s := NewValidator(context.TODO(), translator, xdsSanitizer)
+				s := NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 				rpt, err := s.ValidateGloo(context.TODO(), proxy, nil, false)
 				Expect(err).NotTo(HaveOccurred())
@@ -133,7 +141,7 @@ var _ = Describe("Validation Server", func() {
 				proxy.GetListeners()[0].GetHttpListener().GetVirtualHosts()[0].GetRoutes()[0].Action = errorRouteAction
 				proxy.GetListeners()[2].GetHybridListener().GetMatchedListeners()[0].GetHttpListener().GetVirtualHosts()[0].GetRoutes()[0].Action = errorRouteAction
 
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 			})
 
@@ -177,7 +185,7 @@ var _ = Describe("Validation Server", func() {
 				}
 				params.Snapshot.Proxies = v1.ProxyList{proxy1, proxy2}
 
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 			})
 
@@ -230,7 +238,7 @@ var _ = Describe("Validation Server", func() {
 
 			JustBeforeEach(func() {
 				params.Snapshot.Upstreams = v1.UpstreamList{}
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 				upstream = v1.Upstream{
 					Metadata: &core.Metadata{Name: "other-upstream", Namespace: "other-namespace"},
@@ -270,7 +278,7 @@ var _ = Describe("Validation Server", func() {
 				upstream = v1.Upstream{
 					Metadata: &core.Metadata{Name: "unused-upstream", Namespace: "gloo-system"},
 				}
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 			})
 
 			validateProxyReport := func(proxyReport *validationgrpc.ProxyReport) {
@@ -312,7 +320,7 @@ var _ = Describe("Validation Server", func() {
 				upstream = v1.Upstream{
 					Metadata: &core.Metadata{Name: "test", Namespace: "gloo-system"},
 				}
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 			})
 
@@ -350,7 +358,7 @@ var _ = Describe("Validation Server", func() {
 			var secret v1.Secret
 
 			JustBeforeEach(func() {
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 				secret = v1.Secret{
 					Metadata: &core.Metadata{Name: "unused-secret", Namespace: "gloo-system"},
@@ -392,7 +400,7 @@ var _ = Describe("Validation Server", func() {
 			var secret v1.Secret
 
 			JustBeforeEach(func() {
-				s = NewValidator(context.TODO(), translator, xdsSanitizer)
+				s = NewValidator(vc)
 				_ = s.Sync(context.TODO(), params.Snapshot)
 				secret = v1.Secret{
 					Metadata: &core.Metadata{Name: "secret", Namespace: "gloo-system"},
@@ -450,18 +458,26 @@ var _ = Describe("Validation Server", func() {
 	})
 
 	Context("Watch Sync Notifications", func() {
+
 		var (
+			ctx    context.Context
+			cancel context.CancelFunc
 			srv    *grpc.Server
 			v      Validator
 			client validationgrpc.GlooValidationServiceClient
 		)
-		BeforeEach(func() {
+
+		// The ValidatorConfig is initialized in an outer JustBeforeEach, so we want to run
+		// this block after that has been initialized. That way the inner resources (namely, the context)
+		// are all valid by the time this Setup Node is executed
+		JustBeforeEach(func() {
+			ctx, cancel = context.WithCancel(context.TODO())
 			lis, err := net.Listen("tcp", ":0")
 			Expect(err).NotTo(HaveOccurred())
 
 			srv = grpc.NewServer()
 
-			v = NewValidator(context.TODO(), nil, xdsSanitizer)
+			v = NewValidator(vc)
 
 			server := NewValidationServer()
 			server.SetValidator(v)
@@ -473,41 +489,50 @@ var _ = Describe("Validation Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}()
 
-			cc, err := grpc.DialContext(context.TODO(), lis.Addr().String(), grpc.WithInsecure(), grpc.WithBlock())
+			cc, err := grpc.DialContext(ctx, lis.Addr().String(), grpc.WithInsecure(), grpc.WithBlock())
 			Expect(err).NotTo(HaveOccurred())
 
 			client = validationgrpc.NewGlooValidationServiceClient(cc)
 
 		})
 		AfterEach(func() {
+			cancel()
+
 			srv.Stop()
 		})
 
 		It("sends sync notifications", func() {
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-
 			stream, err := client.NotifyOnResync(ctx, &validationgrpc.NotifyOnResyncRequest{})
 			Expect(err).NotTo(HaveOccurred())
 
 			var notifications []*validationgrpc.NotifyOnResyncResponse
 			var l sync.Mutex
-			var desiredErrCode codes.Code
+
+			terminalState := make(chan codes.Code, 1)
 
 			// watch notifications
 			go func() {
 				defer GinkgoRecover()
+				var state codes.Code // ENUM value 0
 				for {
 					notification, err := stream.Recv()
-					if desiredErrCode == 0 {
-						Expect(err).To(BeNil())
-					} else {
+
+					select {
+					case someCode := <-terminalState:
+						state = someCode
+					default:
+
+					}
+					if state != 0 {
 						Expect(err).NotTo(BeNil())
 						st, ok := status.FromError(err)
 						Expect(ok).To(BeTrue())
-						Expect(st.Code()).To(Equal(desiredErrCode))
+						Expect(st.Code()).To(Equal(state))
 						continue
+					} else {
+						Expect(err).To(BeNil())
 					}
+
 					l.Lock()
 					notifications = append(notifications, notification)
 					l.Unlock()
@@ -552,7 +577,7 @@ var _ = Describe("Validation Server", func() {
 			Eventually(getNotifications, time.Second).Should(HaveLen(5))
 
 			// test close
-			desiredErrCode = codes.Unavailable
+			terminalState <- codes.Unavailable
 			srv.Stop()
 
 			// create jitter by changing upstreams

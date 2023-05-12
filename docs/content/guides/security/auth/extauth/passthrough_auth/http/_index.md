@@ -4,10 +4,6 @@ weight: 10
 description: Authenticating using an external Http service. 
 ---
 
-{{% notice note %}}
-The Http Passthrough feature was introduced with **Gloo Edge Enterprise**, release 1.9.0-beta4. If you are using an earlier version, this tutorial will not work.
-{{% /notice %}}
-
 When using Gloo Edge's external authentication server, it may be convenient to authenticate requests with your own HTTP server.
 By creating requests from the external authentication server to your own authentication component, Gloo Edge can use your authentication server
 to authenticate requests.
@@ -56,7 +52,7 @@ spec:
 EOF
 {{< /highlight >}}
 
-The source code for the Http service can be found in the Gloo Edge repository [here](https://github.com/solo-io/gloo/tree/master/docs/examples/http-passthrough-auth).
+The source code for the Http service can be found in the Gloo Edge repository [here](https://github.com/solo-io/gloo/tree/main/docs/examples/http-passthrough-auth).
 
 Once we create the authentication service, we also want to apply the following Service to assign it a static cluster IP.
 {{< highlight shell >}}

@@ -5,15 +5,17 @@ import (
 	"errors"
 	"fmt"
 
+	types2 "github.com/onsi/gomega/types"
+
 	_struct "github.com/golang/protobuf/ptypes/struct"
-	"github.com/onsi/ginkgo/extensions/table"
 	v3 "github.com/solo-io/gloo/projects/gloo/pkg/api/external/envoy/config/core/v3"
 	envoy_v3 "github.com/solo-io/gloo/projects/gloo/pkg/api/external/envoy/extensions/filters/http/buffer/v3"
 	csrf_v31 "github.com/solo-io/gloo/projects/gloo/pkg/api/external/envoy/extensions/filters/http/csrf/v3"
 	v31 "github.com/solo-io/gloo/projects/gloo/pkg/api/external/envoy/type/matcher/v3"
 	v32 "github.com/solo-io/gloo/projects/gloo/pkg/api/external/envoy/type/matcher/v3"
 	v1snap "github.com/solo-io/gloo/projects/gloo/pkg/api/v1/gloosnapshot"
-	protocol_upgrade "github.com/solo-io/gloo/projects/gloo/pkg/api/v1/options/protocol_upgrade"
+	"github.com/solo-io/gloo/projects/gloo/pkg/api/v1/options/protocol_upgrade"
+	"github.com/solo-io/gloo/projects/gloo/pkg/api/v1/ssl"
 	"github.com/solo-io/solo-apis/pkg/api/ratelimit.solo.io/v1alpha1"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -34,7 +36,8 @@ import (
 	"github.com/golang/protobuf/ptypes/duration"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/golang/protobuf/ptypes/wrappers"
-	. "github.com/onsi/ginkgo"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/solo-io/gloo/pkg/utils/api_conversion"
 	"github.com/solo-io/gloo/pkg/utils/settingsutil"
@@ -220,9 +223,9 @@ var _ = Describe("Translator", func() {
 									},
 								},
 							},
-							SslConfig: &v1.SslConfig{
-								SslSecrets: &v1.SslConfig_SslFiles{
-									SslFiles: &v1.SSLFiles{
+							SslConfig: &ssl.SslConfig{
+								SslSecrets: &ssl.SslConfig_SslFiles{
+									SslFiles: &ssl.SSLFiles{
 										TlsCert: gloohelpers.Certificate(),
 										TlsKey:  gloohelpers.PrivateKey(),
 									},
@@ -245,9 +248,9 @@ var _ = Describe("Translator", func() {
 					MatchedListeners: []*v1.MatchedListener{
 						{
 							Matcher: &v1.Matcher{
-								SslConfig: &v1.SslConfig{
-									SslSecrets: &v1.SslConfig_SslFiles{
-										SslFiles: &v1.SSLFiles{
+								SslConfig: &ssl.SslConfig{
+									SslSecrets: &ssl.SslConfig_SslFiles{
+										SslFiles: &ssl.SSLFiles{
 											TlsCert: gloohelpers.Certificate(),
 											TlsKey:  gloohelpers.PrivateKey(),
 										},
@@ -281,9 +284,9 @@ var _ = Describe("Translator", func() {
 													},
 												},
 											},
-											SslConfig: &v1.SslConfig{
-												SslSecrets: &v1.SslConfig_SslFiles{
-													SslFiles: &v1.SSLFiles{
+											SslConfig: &ssl.SslConfig{
+												SslSecrets: &ssl.SslConfig_SslFiles{
+													SslFiles: &ssl.SSLFiles{
 														TlsCert: gloohelpers.Certificate(),
 														TlsKey:  gloohelpers.PrivateKey(),
 													},
@@ -299,9 +302,9 @@ var _ = Describe("Translator", func() {
 						},
 						{
 							Matcher: &v1.Matcher{
-								SslConfig: &v1.SslConfig{
-									SslSecrets: &v1.SslConfig_SslFiles{
-										SslFiles: &v1.SSLFiles{
+								SslConfig: &ssl.SslConfig{
+									SslSecrets: &ssl.SslConfig_SslFiles{
+										SslFiles: &ssl.SSLFiles{
 											TlsCert: gloohelpers.Certificate(),
 											TlsKey:  gloohelpers.PrivateKey(),
 										},
@@ -351,6 +354,15 @@ var _ = Describe("Translator", func() {
 		_, errs, report := translator.Translate(params, proxy)
 		ExpectWithOffset(1, errs.Validate()).To(HaveOccurred())
 		return report
+	}
+
+	translateWithInvalidRoutePath := func() *validation.ProxyReport {
+		_, errs, report := translator.Translate(params, proxy)
+		err := errs.Validate()
+		ExpectWithOffset(1, err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cannot contain [/../]"))
+		return report
+
 	}
 
 	translateWithBuggyHasher := func() *validation.ProxyReport {
@@ -438,8 +450,12 @@ var _ = Describe("Translator", func() {
 
 	It("translates listener options", func() {
 		proxyClone := proto.Clone(proxy).(*v1.Proxy)
-
-		proxyClone.GetListeners()[0].Options = &v1.ListenerOptions{PerConnectionBufferLimitBytes: &wrappers.UInt32Value{Value: 4096}}
+		proxyClone.GetListeners()[0].Options = &v1.ListenerOptions{
+			PerConnectionBufferLimitBytes: &wrappers.UInt32Value{Value: 4096},
+			ConnectionBalanceConfig: &v1.ConnectionBalanceConfig{
+				ExactBalance: &v1.ConnectionBalanceConfig_ExactBalance{},
+			},
+		}
 
 		snap, errs, report := translator.Translate(params, proxyClone)
 		Expect(errs.Validate()).NotTo(HaveOccurred())
@@ -452,6 +468,12 @@ var _ = Describe("Translator", func() {
 		listenerConfiguration := listenerResource.ResourceProto().(*envoy_config_listener_v3.Listener)
 		Expect(listenerConfiguration).NotTo(BeNil())
 		Expect(listenerConfiguration.PerConnectionBufferLimitBytes).To(MatchProto(&wrappers.UInt32Value{Value: 4096}))
+		Expect(listenerConfiguration.GetConnectionBalanceConfig().GetExactBalance()).To(Not(BeNil()))
+		Expect(listenerConfiguration.GetConnectionBalanceConfig()).To(MatchProto(&envoy_config_listener_v3.Listener_ConnectionBalanceConfig{
+			BalanceType: &envoy_config_listener_v3.Listener_ConnectionBalanceConfig_ExactBalance_{
+				ExactBalance: &envoy_config_listener_v3.Listener_ConnectionBalanceConfig_ExactBalance{},
+			},
+		}))
 	})
 
 	Context("Auth configs", func() {
@@ -654,6 +676,100 @@ var _ = Describe("Translator", func() {
 			Expect(actualRegexRedirect.Pattern.Regex).To(Equal(expectedRedirectAction.Redirect.GetRegexRewrite().Pattern.Regex))
 			Expect(actualRegexRedirect.Substitution).To(Equal(expectedRedirectAction.Redirect.GetRegexRewrite().Substitution))
 			Expect(envoyRoute.Match.CaseSensitive).To(Equal(&wrappers.BoolValue{Value: false}))
+		})
+	})
+
+	Context("invalid route paths", func() {
+		It("should report an invalid path redirect", func() {
+			glooRoute := &v1.Route{
+				Action: &v1.Route_RedirectAction{
+					RedirectAction: &v1.RedirectAction{
+						PathRewriteSpecifier: &v1.RedirectAction_PathRedirect{
+							// invalid sequence
+							PathRedirect: "/../../home/secretdata",
+						},
+					},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
+		})
+		It("should report an invalid prefix rewrite", func() {
+			glooRoute := &v1.Route{
+				Action: &v1.Route_RedirectAction{
+					RedirectAction: &v1.RedirectAction{
+						PathRewriteSpecifier: &v1.RedirectAction_PrefixRewrite{
+							PrefixRewrite: "home/../secret",
+						},
+					},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
+		})
+
+		It("should report an invalid host redirect", func() {
+			glooRoute := &v1.Route{
+				Action: &v1.Route_RedirectAction{
+					RedirectAction: &v1.RedirectAction{
+						HostRedirect: "otherhost/../secret",
+					},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
+		})
+
+		It("should report an invalid prefix rewrite", func() {
+			glooRoute := &v1.Route{
+				Action: &v1.Route_RouteAction{
+					RouteAction: &v1.RouteAction{
+						Destination: &v1.RouteAction_Single{
+							Single: &v1.Destination{
+								DestinationType: &v1.Destination_Upstream{
+									Upstream: &core.ResourceRef{
+										Name:      "somename",
+										Namespace: "someNamespace",
+									},
+								},
+							},
+						},
+					},
+				},
+				Options: &v1.RouteOptions{
+					PrefixRewrite: &wrapperspb.StringValue{Value: "/home/../secret"},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
+		})
+
+		It("should report an invalid prefix", func() {
+			glooRoute := &v1.Route{
+				Matchers: []*matchers.Matcher{
+					{
+						PathSpecifier: &matchers.Matcher_Prefix{
+							Prefix: "home/../secret",
+						},
+					},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
+		})
+
+		It("should report an invalid prefix", func() {
+			glooRoute := &v1.Route{
+				Matchers: []*matchers.Matcher{
+					{
+						PathSpecifier: &matchers.Matcher_Exact{
+							Exact: "home/../secret",
+						},
+					},
+				},
+			}
+			routes[0] = glooRoute
+			translateWithInvalidRoutePath()
 		})
 	})
 
@@ -966,6 +1082,7 @@ var _ = Describe("Translator", func() {
 							RequestHeadersToRemove: []string{},
 							CodecClientType:        envoy_type_v3.CodecClientType_HTTP2,
 							ExpectedStatuses:       []*envoy_type_v3.Int64Range{},
+							Method:                 envoy_config_core_v3.RequestMethod_POST,
 						},
 					},
 				},
@@ -979,6 +1096,15 @@ var _ = Describe("Translator", func() {
 				msgList = append(msgList, v)
 			}
 			Expect(cluster.HealthChecks).To(ConsistOfProtos(msgList...))
+
+			By("rejects http health checkers with CONNECT method")
+			expectedResult[0].GetHttpHealthCheck().Method = envoy_config_core_v3.RequestMethod_CONNECT
+			upstream.HealthChecks, err = api_conversion.ToGlooHealthCheckList(expectedResult)
+			Expect(err).NotTo(HaveOccurred())
+			_, errs, _ := translator.Translate(params, proxy)
+			_, usReport := errs.Find("*v1.Upstream", upstream.Metadata.Ref())
+			Expect(usReport.Errors).To(Not(BeNil()))
+			Expect(usReport.Errors.Error()).To(ContainSubstring("method CONNECT is not allowed on http health checkers"))
 		})
 
 		It("can translate the grpc health check", func() {
@@ -2607,7 +2733,7 @@ var _ = Describe("Translator", func() {
 		})
 
 		It("skips listeners with invalid downstream ssl config", func() {
-			invalidSslSecretRef := &v1.SslConfig_SecretRef{
+			invalidSslSecretRef := &ssl.SslConfig_SecretRef{
 				SecretRef: &core.ResourceRef{
 					Name:      "invalid",
 					Namespace: "invalid",
@@ -2615,7 +2741,7 @@ var _ = Describe("Translator", func() {
 			}
 
 			proxyClone := proto.Clone(proxy).(*v1.Proxy)
-			proxyClone.GetListeners()[2].GetHybridListener().GetMatchedListeners()[1].SslConfigurations = []*v1.SslConfig{{
+			proxyClone.GetListeners()[2].GetHybridListener().GetMatchedListeners()[1].SslConfigurations = []*ssl.SslConfig{{
 				SslSecrets: invalidSslSecretRef,
 			}}
 
@@ -2644,8 +2770,8 @@ var _ = Describe("Translator", func() {
 				},
 			}
 			ref := secret.Metadata.Ref()
-			upstream.SslConfig = &v1.UpstreamSslConfig{
-				SslSecrets: &v1.UpstreamSslConfig_SecretRef{
+			upstream.SslConfig = &ssl.UpstreamSslConfig{
+				SslSecrets: &ssl.UpstreamSslConfig_SecretRef{
 					SecretRef: ref,
 				},
 			}
@@ -2699,17 +2825,17 @@ var _ = Describe("Translator", func() {
 		Context("SslParameters", func() {
 
 			It("should set upstream SslParameters if defined on upstream", func() {
-				upstreamSslParameters := &v1.SslParameters{
+				upstreamSslParameters := &ssl.SslParameters{
 					CipherSuites: []string{"AES256-SHA", "AES256-GCM-SHA384"},
 				}
 
-				settingsSslParameters := &v1.SslParameters{
+				settingsSslParameters := &ssl.SslParameters{
 					CipherSuites: []string{"ECDHE-RSA-AES128-SHA"},
 				}
 
 				upstream.SslConfig.Parameters = upstreamSslParameters
-				upstream.SslConfig.SslSecrets = &v1.UpstreamSslConfig_SslFiles{
-					SslFiles: &v1.SSLFiles{
+				upstream.SslConfig.SslSecrets = &ssl.UpstreamSslConfig_SslFiles{
+					SslFiles: &ssl.SSLFiles{
 						TlsCert: gloohelpers.Certificate(),
 						TlsKey:  gloohelpers.PrivateKey(),
 					},
@@ -2724,13 +2850,13 @@ var _ = Describe("Translator", func() {
 			})
 
 			It("should set settings.UpstreamOptions SslParameters if none defined on upstream", func() {
-				settingsSslParameters := &v1.SslParameters{
+				settingsSslParameters := &ssl.SslParameters{
 					CipherSuites: []string{"ECDHE-RSA-AES128-SHA"},
 				}
 
 				upstream.SslConfig.Parameters = nil
-				upstream.SslConfig.SslSecrets = &v1.UpstreamSslConfig_SslFiles{
-					SslFiles: &v1.SSLFiles{
+				upstream.SslConfig.SslSecrets = &ssl.UpstreamSslConfig_SslFiles{
+					SslFiles: &ssl.SSLFiles{
 						TlsCert: gloohelpers.Certificate(),
 						TlsKey:  gloohelpers.PrivateKey(),
 					},
@@ -2772,7 +2898,7 @@ var _ = Describe("Translator", func() {
 			listener *envoy_config_listener_v3.Listener
 		)
 
-		prepSsl := func(s []*v1.SslConfig) {
+		prepSsl := func(s []*ssl.SslConfig) {
 			httpListener := &v1.Listener{
 				Name:        "http-listener",
 				BindAddress: "127.0.0.1",
@@ -2793,7 +2919,7 @@ var _ = Describe("Translator", func() {
 			}
 		}
 
-		prep := func(s []*v1.SslConfig) {
+		prep := func(s []*ssl.SslConfig) {
 			prepSsl(s)
 			translate()
 
@@ -2812,10 +2938,10 @@ var _ = Describe("Translator", func() {
 		Context("files", func() {
 
 			It("should translate ssl correctly", func() {
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
@@ -2839,10 +2965,10 @@ var _ = Describe("Translator", func() {
 					IsCA:  true,
 				})
 
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: cert1,
 								TlsKey:  privateKey1,
 							},
@@ -2852,8 +2978,8 @@ var _ = Describe("Translator", func() {
 						},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: cert2,
 								TlsKey:  privateKey2,
 							},
@@ -2869,18 +2995,18 @@ var _ = Describe("Translator", func() {
 			})
 
 			It("should merge 2 ssl config if they are the same", func() {
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
 						},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
@@ -2914,10 +3040,10 @@ var _ = Describe("Translator", func() {
 				Expect(report.Errors[0].Type).To(Equal(validation.ListenerReport_Error_SSLConfigError))
 			})
 			It("should combine sni matches", func() {
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
@@ -2925,8 +3051,8 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"a.com"},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
@@ -2946,18 +3072,18 @@ var _ = Describe("Translator", func() {
 			})
 			It("should combine 1 that has and 1 that doesn't have sni", func() {
 
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
 						},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SslFiles{
-							SslFiles: &v1.SSLFiles{
+						SslSecrets: &ssl.SslConfig_SslFiles{
+							SslFiles: &ssl.SSLFiles{
 								TlsCert: gloohelpers.Certificate(),
 								TlsKey:  gloohelpers.PrivateKey(),
 							},
@@ -2989,9 +3115,9 @@ var _ = Describe("Translator", func() {
 					},
 				})
 
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3000,7 +3126,7 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"a.com"},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3070,9 +3196,9 @@ var _ = Describe("Translator", func() {
 					},
 				})
 
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3081,7 +3207,7 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"a.com"},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo2",
 								Namespace: "solo.io",
@@ -3090,7 +3216,7 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"b.com"},
 					},
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io2",
@@ -3099,10 +3225,10 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"c.com"},
 					},
 					{
-						Parameters: &v1.SslParameters{
-							MinimumProtocolVersion: v1.SslParameters_TLSv1_2,
+						Parameters: &ssl.SslParameters{
+							MinimumProtocolVersion: ssl.SslParameters_TLSv1_2,
 						},
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io2",
@@ -3111,10 +3237,10 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"d.com"},
 					},
 					{
-						Parameters: &v1.SslParameters{
-							MinimumProtocolVersion: v1.SslParameters_TLSv1_2,
+						Parameters: &ssl.SslParameters{
+							MinimumProtocolVersion: ssl.SslParameters_TLSv1_2,
 						},
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io2",
@@ -3177,9 +3303,9 @@ var _ = Describe("Translator", func() {
 					},
 				})
 
-				prepSsl([]*v1.SslConfig{
+				prepSsl([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3188,10 +3314,10 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"a.com"},
 					},
 					{
-						Parameters: &v1.SslParameters{
-							MinimumProtocolVersion: v1.SslParameters_TLSv1_2,
+						Parameters: &ssl.SslParameters{
+							MinimumProtocolVersion: ssl.SslParameters_TLSv1_2,
 						},
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3221,9 +3347,9 @@ var _ = Describe("Translator", func() {
 					},
 				})
 
-				prepSsl([]*v1.SslConfig{
+				prepSsl([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3231,10 +3357,10 @@ var _ = Describe("Translator", func() {
 						},
 					},
 					{
-						Parameters: &v1.SslParameters{
-							MinimumProtocolVersion: v1.SslParameters_TLSv1_2,
+						Parameters: &ssl.SslParameters{
+							MinimumProtocolVersion: ssl.SslParameters_TLSv1_2,
 						},
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3263,9 +3389,9 @@ var _ = Describe("Translator", func() {
 					},
 				})
 
-				prep([]*v1.SslConfig{
+				prep([]*ssl.SslConfig{
 					{
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3274,10 +3400,10 @@ var _ = Describe("Translator", func() {
 						SniDomains: []string{"a.com"},
 					},
 					{
-						Parameters: &v1.SslParameters{
-							MinimumProtocolVersion: v1.SslParameters_TLSv1_2,
+						Parameters: &ssl.SslParameters{
+							MinimumProtocolVersion: ssl.SslParameters_TLSv1_2,
 						},
-						SslSecrets: &v1.SslConfig_SecretRef{
+						SslSecrets: &ssl.SslConfig_SecretRef{
 							SecretRef: &core.ResourceRef{
 								Name:      "solo",
 								Namespace: "solo.io",
@@ -3374,7 +3500,7 @@ var _ = Describe("Translator", func() {
 	})
 
 	Context("IgnoreHealthOnHostRemoval", func() {
-		table.DescribeTable("propagates IgnoreHealthOnHostRemoval to Cluster", func(upstreamValue *wrappers.BoolValue, expectedClusterValue bool) {
+		DescribeTable("propagates IgnoreHealthOnHostRemoval to Cluster", func(upstreamValue *wrappers.BoolValue, expectedClusterValue bool) {
 			// Set the value
 			upstream.IgnoreHealthOnHostRemoval = upstreamValue
 
@@ -3389,9 +3515,39 @@ var _ = Describe("Translator", func() {
 			Expect(cluster).NotTo(BeNil())
 			Expect(cluster.IgnoreHealthOnHostRemoval).To(Equal(expectedClusterValue))
 		},
-			table.Entry("When value=true", &wrappers.BoolValue{Value: true}, true),
-			table.Entry("When value=false", &wrappers.BoolValue{Value: false}, false),
-			table.Entry("When value=nil", nil, false))
+			Entry("When value=true", &wrappers.BoolValue{Value: true}, true),
+			Entry("When value=false", &wrappers.BoolValue{Value: false}, false),
+			Entry("When value=nil", nil, false))
+	})
+
+	Context("DnsRefreshRate", func() {
+		DescribeTable("Sets DnsRefreshRate on Cluster",
+			func(staticUpstream bool, refreshRate *duration.Duration, refreshRateMatcher types2.GomegaMatcher, reportMatcher types2.GomegaMatcher) {
+				// By default, the Upstream is configured as a Static Upstream
+				if !staticUpstream {
+					upstream.UpstreamType = &v1.Upstream_Kube{
+						Kube: &v1kubernetes.UpstreamSpec{
+							ServiceName:      "service-name",
+							ServiceNamespace: "service-ns",
+						},
+					}
+				}
+				upstream.DnsRefreshRate = refreshRate
+
+				snap, errs, _ := translator.Translate(params, proxy)
+				Expect(snap).NotTo(BeNil(), "Ensure the xds Snapshot is not nil")
+				Expect(errs.ValidateStrict()).To(reportMatcher, "Ensure the reports contain the necessary errors/warnings")
+
+				clusters := snap.GetResources(types.ClusterTypeV3)
+				clusterResource := clusters.Items[UpstreamToClusterName(upstream.Metadata.Ref())]
+				cluster = clusterResource.ResourceProto().(*envoy_config_cluster_v3.Cluster)
+				Expect(cluster.GetDnsRefreshRate()).To(refreshRateMatcher)
+			},
+			Entry("Static, DnsRefreshRate=nil", true, nil, BeNil(), BeNil()),
+			Entry("Static, DsnRefreshRate valid", true, &duration.Duration{Seconds: 1}, MatchProto(&duration.Duration{Seconds: 1}), BeNil()),
+			Entry("Static, DsnRefreshRate=0", true, &duration.Duration{Seconds: 0}, BeNil(), MatchError(ContainSubstring("dnsRefreshRate was set below minimum requirement"))),
+			Entry("Eds, DsnRefreshRate valid", false, &duration.Duration{Seconds: 1}, MatchProto(&duration.Duration{Seconds: 1}), MatchError(ContainSubstring("DnsRefreshRate is only valid with STRICT_DNS or LOGICAL_DNS cluster type"))),
+		)
 	})
 
 	//TODO: We could split this into a test file for clusters.go

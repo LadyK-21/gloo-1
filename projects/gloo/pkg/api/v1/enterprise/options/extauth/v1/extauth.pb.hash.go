@@ -576,6 +576,130 @@ func (m *BasicAuth) Hash(hasher hash.Hash64) (uint64, error) {
 }
 
 // Hash function
+func (m *HmacAuth) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.HmacAuth")); err != nil {
+		return 0, err
+	}
+
+	switch m.SecretStorage.(type) {
+
+	case *HmacAuth_SecretRefs:
+
+		if h, ok := interface{}(m.GetSecretRefs()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("SecretRefs")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetSecretRefs(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("SecretRefs")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	switch m.ImplementationType.(type) {
+
+	case *HmacAuth_ParametersInHeaders:
+
+		if h, ok := interface{}(m.GetParametersInHeaders()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("ParametersInHeaders")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetParametersInHeaders(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("ParametersInHeaders")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *SecretRefList) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.SecretRefList")); err != nil {
+		return 0, err
+	}
+
+	for _, v := range m.GetSecretRefs() {
+
+		if h, ok := interface{}(v).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(v, nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *HmacParametersInHeaders) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.HmacParametersInHeaders")); err != nil {
+		return 0, err
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
 func (m *OAuth) Hash(hasher hash.Hash64) (uint64, error) {
 	if m == nil {
 		return 0, nil
@@ -813,6 +937,26 @@ func (m *UserSession) Hash(hasher hash.Hash64) (uint64, error) {
 			return 0, err
 		} else {
 			if _, err = hasher.Write([]byte("CookieOptions")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	if h, ok := interface{}(m.GetCipherConfig()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("CipherConfig")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetCipherConfig(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("CipherConfig")); err != nil {
 				return 0, err
 			}
 			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
@@ -2222,6 +2366,10 @@ func (m *ApiKey) Hash(hasher hash.Hash64) (uint64, error) {
 
 	}
 
+	if _, err = hasher.Write([]byte(m.GetUuid())); err != nil {
+		return 0, err
+	}
+
 	return hasher.Sum64(), nil
 }
 
@@ -2611,6 +2759,42 @@ func (m *PassThroughGrpc) Hash(hasher hash.Hash64) (uint64, error) {
 				return 0, err
 			}
 		}
+	}
+
+	if h, ok := interface{}(m.GetTlsConfig()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("TlsConfig")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetTlsConfig(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("TlsConfig")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *PassThroughGrpcTLSConfig) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.PassThroughGrpcTLSConfig")); err != nil {
+		return 0, err
 	}
 
 	return hasher.Sum64(), nil
@@ -3299,6 +3483,28 @@ func (m *AuthConfig_Config) Hash(hasher hash.Hash64) (uint64, error) {
 			}
 		}
 
+	case *AuthConfig_Config_HmacAuth:
+
+		if h, ok := interface{}(m.GetHmacAuth()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("HmacAuth")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetHmacAuth(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("HmacAuth")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
 	}
 
 	return hasher.Sum64(), nil
@@ -3699,6 +3905,48 @@ func (m *UserSession_CookieOptions) Hash(hasher hash.Hash64) (uint64, error) {
 
 	if _, err = hasher.Write([]byte(m.GetDomain())); err != nil {
 		return 0, err
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *UserSession_CipherConfig) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.UserSession_CipherConfig")); err != nil {
+		return 0, err
+	}
+
+	switch m.Key.(type) {
+
+	case *UserSession_CipherConfig_KeyRef:
+
+		if h, ok := interface{}(m.GetKeyRef()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("KeyRef")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetKeyRef(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("KeyRef")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
 	}
 
 	return hasher.Sum64(), nil
@@ -4191,6 +4439,115 @@ func (m *ExtAuthConfig_OAuthConfig) Hash(hasher hash.Hash64) (uint64, error) {
 }
 
 // Hash function
+func (m *ExtAuthConfig_UserSessionConfig) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.ExtAuthConfig_UserSessionConfig")); err != nil {
+		return 0, err
+	}
+
+	err = binary.Write(hasher, binary.LittleEndian, m.GetFailOnFetchFailure())
+	if err != nil {
+		return 0, err
+	}
+
+	if h, ok := interface{}(m.GetCookieOptions()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("CookieOptions")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetCookieOptions(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("CookieOptions")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	if h, ok := interface{}(m.GetCipherConfig()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("CipherConfig")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetCipherConfig(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("CipherConfig")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	switch m.Session.(type) {
+
+	case *ExtAuthConfig_UserSessionConfig_Cookie:
+
+		if h, ok := interface{}(m.GetCookie()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("Cookie")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetCookie(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("Cookie")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	case *ExtAuthConfig_UserSessionConfig_Redis:
+
+		if h, ok := interface{}(m.GetRedis()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("Redis")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetRedis(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("Redis")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
 func (m *ExtAuthConfig_OidcAuthorizationCodeConfig) Hash(hasher hash.Hash64) (uint64, error) {
 	if m == nil {
 		return 0, nil
@@ -4426,6 +4783,26 @@ func (m *ExtAuthConfig_OidcAuthorizationCodeConfig) Hash(hasher hash.Hash64) (ui
 			return 0, err
 		} else {
 			if _, err = hasher.Write([]byte("EndSessionProperties")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	if h, ok := interface{}(m.GetUserSession()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("UserSession")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetUserSession(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("UserSession")); err != nil {
 				return 0, err
 			}
 			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
@@ -4678,6 +5055,26 @@ func (m *ExtAuthConfig_PlainOAuth2Config) Hash(hasher hash.Hash64) (uint64, erro
 
 	if _, err = hasher.Write([]byte(m.GetRevocationEndpoint())); err != nil {
 		return 0, err
+	}
+
+	if h, ok := interface{}(m.GetUserSession()).(safe_hasher.SafeHasher); ok {
+		if _, err = hasher.Write([]byte("UserSession")); err != nil {
+			return 0, err
+		}
+		if _, err = h.Hash(hasher); err != nil {
+			return 0, err
+		}
+	} else {
+		if fieldValue, err := hashstructure.Hash(m.GetUserSession(), nil); err != nil {
+			return 0, err
+		} else {
+			if _, err = hasher.Write([]byte("UserSession")); err != nil {
+				return 0, err
+			}
+			if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+				return 0, err
+			}
+		}
 	}
 
 	return hasher.Sum64(), nil
@@ -5077,6 +5474,113 @@ func (m *ExtAuthConfig_LdapServiceAccountConfig) Hash(hasher hash.Hash64) (uint6
 }
 
 // Hash function
+func (m *ExtAuthConfig_HmacAuthConfig) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.ExtAuthConfig_HmacAuthConfig")); err != nil {
+		return 0, err
+	}
+
+	switch m.SecretStorage.(type) {
+
+	case *ExtAuthConfig_HmacAuthConfig_SecretList:
+
+		if h, ok := interface{}(m.GetSecretList()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("SecretList")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetSecretList(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("SecretList")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	switch m.ImplementationType.(type) {
+
+	case *ExtAuthConfig_HmacAuthConfig_ParametersInHeaders:
+
+		if h, ok := interface{}(m.GetParametersInHeaders()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("ParametersInHeaders")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetParametersInHeaders(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("ParametersInHeaders")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *ExtAuthConfig_InMemorySecretList) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.ExtAuthConfig_InMemorySecretList")); err != nil {
+		return 0, err
+	}
+
+	{
+		var result uint64
+		innerHash := fnv.New64()
+		for k, v := range m.GetSecretList() {
+			innerHash.Reset()
+
+			if _, err = innerHash.Write([]byte(v)); err != nil {
+				return 0, err
+			}
+
+			if _, err = innerHash.Write([]byte(k)); err != nil {
+				return 0, err
+			}
+
+			result = result ^ innerHash.Sum64()
+		}
+		err = binary.Write(hasher, binary.LittleEndian, result)
+		if err != nil {
+			return 0, err
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
 func (m *ExtAuthConfig_Config) Hash(hasher hash.Hash64) (uint64, error) {
 	if m == nil {
 		return 0, nil
@@ -5331,6 +5835,48 @@ func (m *ExtAuthConfig_Config) Hash(hasher hash.Hash64) (uint64, error) {
 			}
 		}
 
+	case *ExtAuthConfig_Config_HmacAuth:
+
+		if h, ok := interface{}(m.GetHmacAuth()).(safe_hasher.SafeHasher); ok {
+			if _, err = hasher.Write([]byte("HmacAuth")); err != nil {
+				return 0, err
+			}
+			if _, err = h.Hash(hasher); err != nil {
+				return 0, err
+			}
+		} else {
+			if fieldValue, err := hashstructure.Hash(m.GetHmacAuth(), nil); err != nil {
+				return 0, err
+			} else {
+				if _, err = hasher.Write([]byte("HmacAuth")); err != nil {
+					return 0, err
+				}
+				if err := binary.Write(hasher, binary.LittleEndian, fieldValue); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+	}
+
+	return hasher.Sum64(), nil
+}
+
+// Hash function
+func (m *ExtAuthConfig_UserSessionConfig_CipherConfig) Hash(hasher hash.Hash64) (uint64, error) {
+	if m == nil {
+		return 0, nil
+	}
+	if hasher == nil {
+		hasher = fnv.New64()
+	}
+	var err error
+	if _, err = hasher.Write([]byte("enterprise.gloo.solo.io.github.com/solo-io/gloo/projects/gloo/pkg/api/v1/enterprise/options/extauth/v1.ExtAuthConfig_UserSessionConfig_CipherConfig")); err != nil {
+		return 0, err
+	}
+
+	if _, err = hasher.Write([]byte(m.GetKey())); err != nil {
+		return 0, err
 	}
 
 	return hasher.Sum64(), nil
